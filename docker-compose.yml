@@ -1,0 +1,81 @@
+version: "3.9"
+
+services:
+  # ================================
+  # MongoDB Service
+  # ================================
+  mongo:
+    image: mongo:6
+    container_name: mynotes-mongo
+    restart: always
+
+    # Expose ke host (opsional, boleh hapus kalau mau 100% internal)
+    ports:
+      - "27017:27017"
+
+    # Volume supaya data tidak hilang saat container mati
+    volumes:
+      - mongo_data:/data/db
+
+    # Initial database (opsional)
+    environment:
+      MONGO_INITDB_DATABASE: mynotes
+
+    # Healthcheck agar API hanya start saat Mongo siap
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+    networks:
+      - notes-network
+
+  # ================================
+  # Spring Boot API Service
+  # ================================
+  api:
+    build: .
+    container_name: mynotes-api
+    restart: always
+
+    # "8080" di container tetap, tapi host port pakai ${PORT}
+    ports:
+      - "${PORT}:8080"
+
+    environment:
+      # Port untuk Spring Boot (baca di application.properties)
+      PORT: ${PORT}
+
+      # MONGO_URI format recommended
+      # mongodb://mongo:27017/mynotes
+      MONGO_URI: ${MONGO_URI}
+
+      # CORS untuk frontend
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+
+      # JWT Config
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ACCESS_EXPIRATION: ${JWT_ACCESS_EXPIRATION}
+      JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION}
+
+    # Tunggu mongo sampai sehat
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+    networks:
+      - notes-network
+
+# ================================
+# Volumes (persistent)
+# ================================
+volumes:
+  mongo_data:
+
+# ================================
+# Private Docker Network
+# ================================
+networks:
+  notes-network:
+    driver: bridge
